@@ -236,7 +236,7 @@
 
   <script>
     (function() {
-      // 完整的30个城市列表（省会/直辖市 + 旅游城市）
+      // ---------- 30个城市列表 ----------
       const cities = [
         "北京", "上海", "天津", "重庆",
         "杭州", "南京", "济南", "合肥", "福州", "南昌",
@@ -248,7 +248,7 @@
         "沈阳", "哈尔滨", "长春"
       ];
 
-      // 预设一些纸团显示（随机展示其中几个）
+      // DOM 元素
       const paperPile = document.getElementById('paperPile');
       const resultContainer = document.getElementById('resultContainer');
       const cityResult = document.getElementById('cityResult');
@@ -256,7 +256,21 @@
       const placeholder = document.getElementById('placeholderText');
       const grabBtn = document.getElementById('grabBtn');
 
-      // 初始化纸团展示（随机取6-8个城市展示为小纸团）
+      // ---------- 抓阄防抖 & 摇一摇优化 (避免指关节截屏误触发) ----------
+      let lastTriggerTime = 0;           // 上次抓阄触发时间 (毫秒)
+      const TRIGGER_COOLDOWN = 1200;      // 抓阄冷却时间 (1.2秒内不重复触发，兼顾按钮和摇一摇)
+      
+      // 摇一摇专用: 连续晃动检测 (防止单次冲击触发，例如指关节截屏)
+      let shakeCount = 0;                // 连续超过阈值的次数
+      let lastShakePeakTime = 0;         // 上一次检测到有效震动的时间
+      const SHAKE_THRESHOLD = 15;         // 加速度变化阈值 (与原保持一致)
+      const SHAKE_SEQUENCE_INTERVAL = 220; // 有效震动间隔需小于220ms才算连续晃动
+      const REQUIRED_SHAKE_COUNT = 3;     // 需要连续3次有效震动才触发抓阄 (摇一摇动作)
+      
+      // 辅助变量: 记录摇一摇监听是否可用 (无额外操作)
+      
+      // ---------- 工具函数 ----------
+      // 随机展示6~8个纸团 (增加趣味)
       function renderPaperScraps() {
         const shuffled = [...cities].sort(() => Math.random() - 0.5);
         const displayCities = shuffled.slice(0, 8);
@@ -264,84 +278,170 @@
           `<div class="paper-scrap">📜 ${city}</div>`
         ).join('');
       }
-      renderPaperScraps();
-
-      // 随机选择一个城市
+      
+      // 随机获取一个城市
       function getRandomCity() {
         const randomIndex = Math.floor(Math.random() * cities.length);
         return cities[randomIndex];
       }
-
-      // 执行抓阄动画和结果显示
-      function performGrab() {
-        // 轻微滚动效果（纸团抖动）
+      
+      // 重置摇一摇的计数状态 (避免残留计数导致意外触发)
+      function resetShakeState() {
+        shakeCount = 0;
+        lastShakePeakTime = 0;
+      }
+      
+      // 核心抓阄逻辑 (动画+结果展示)
+      function performGrab(triggerSource = 'manual') {
+        const now = Date.now();
+        // 冷却判断: 短时间内重复触发会被拦截 (避免手机疯狂摇动或连续点按)
+        if (now - lastTriggerTime < TRIGGER_COOLDOWN) {
+          // 如果是摇一摇触发且处于冷却期，静默忽略；按钮触发也不做额外提示，仅避免过度反应
+          return;
+        }
+        
+        // 更新最后触发时间
+        lastTriggerTime = now;
+        
+        // 轻量纸团抖动动画 (模拟抓取瞬间)
         const scraps = document.querySelectorAll('.paper-scrap');
         scraps.forEach(el => {
-          el.style.transform = `rotate(${Math.random() * 10 - 5}deg) scale(0.95)`;
+          el.style.transform = `rotate(${Math.random() * 12 - 6}deg) scale(0.92)`;
           setTimeout(() => {
-            el.style.transform = '';
+            if (el) el.style.transform = '';
           }, 200);
         });
-
-        // 随机结果
+        
+        // 随机抽取城市
         const selectedCity = getRandomCity();
-
-        // 显示结果区域
+        
+        // 显示结果卡片
         resultContainer.style.display = 'block';
         cityResult.textContent = selectedCity;
-        // 添加弹出动画
         resultContainer.classList.add('pop-effect');
         setTimeout(() => resultContainer.classList.remove('pop-effect'), 400);
-
-        // 随机一些小提示
+        
+        // 随机趣味提示
         const hints = [
-          "团走起！", "马上订机票吧～", "这个城市超美！", "一起喝下午茶吧", 
-          "毕业旅行开始！", "妈妈也疯狂！", "朋友圈素材+1", "享受假期～"
+          "走起！✈️", "马上订机票吧～", "这个城市超美！", "一起喝下午茶吧", 
+          "毕业旅行开始！", "妈妈也疯狂！", "朋友圈素材+1", "享受假期～",
+          "美食超多！", "出发吧少年", "好运相伴✨"
         ];
         extraHint.textContent = hints[Math.floor(Math.random() * hints.length)];
-
-        // 隐藏占位文字
+        
+        // 隐藏初始占位文字
         if (placeholder) placeholder.style.display = 'none';
-
-        // 重新随机纸团展示，增加新鲜感
+        
+        // 刷新纸团堆，让阄罐看起来“重新填满”
         renderPaperScraps();
+        
+        // 每次抓阄结束后重置摇一摇的计数，避免因为残留震动在冷却后立即又触发
+        resetShakeState();
+        
+        // 可选: 轻微振动反馈 (仅真实抓阄时触发)
+        if (window.navigator && window.navigator.vibrate) {
+          window.navigator.vibrate(12);
+        }
       }
-
-      // 按钮点击事件
-      grabBtn.addEventListener('click', performGrab);
-
-      // 监听手机摇一摇（利用 DeviceMotionEvent）
-      // 注意：在微信内置浏览器及现代浏览器中，需要用户手势触发后才可请求权限或直接使用。
-      // 这里简单实现：检测加速度变化，连续晃动触发抓阄。
-      let lastShakeTime = 0;
-      const SHAKE_THRESHOLD = 15; // 加速度变化阈值
-      if (window.DeviceMotionEvent) {
-        window.addEventListener('devicemotion', function(event) {
+      
+      // ---------- 摇一摇核心逻辑 (连续晃动检测, 屏蔽单次冲击如截屏) ----------
+      function initShakeDetection() {
+        if (!window.DeviceMotionEvent) {
+          console.log("当前设备不支持devicemotion");
+          return;
+        }
+        
+        let motionHandler = function(event) {
           const acc = event.accelerationIncludingGravity;
           if (!acc) return;
+          
+          // 计算加速度矢量和 (强度)
           const x = acc.x || 0;
           const y = acc.y || 0;
           const z = acc.z || 0;
           const magnitude = Math.sqrt(x*x + y*y + z*z);
+          
           const now = Date.now();
-          // 防止短时间内多次触发 (间隔1.5秒)
-          if (magnitude > SHAKE_THRESHOLD && (now - lastShakeTime > 1500)) {
-            lastShakeTime = now;
-            performGrab();
-            // 轻振动反馈（如果支持）
-            if (window.navigator && window.navigator.vibrate) {
-              window.navigator.vibrate(20);
+          
+          // 防过热: 如果距离上次抓阄触发还在冷却期，连摇一摇计数也不累积（避免截屏冷却中积累无用计数）
+          if (now - lastTriggerTime < TRIGGER_COOLDOWN) {
+            return;
+          }
+          
+          // 检测是否超过阈值 (有效震动)
+          if (magnitude > SHAKE_THRESHOLD) {
+            // 判断与上一次有效震动的时间间隔
+            if (lastShakePeakTime === 0) {
+              // 第一次震动
+              shakeCount = 1;
+              lastShakePeakTime = now;
+            } else {
+              const interval = now - lastShakePeakTime;
+              if (interval < SHAKE_SEQUENCE_INTERVAL) {
+                // 连续有效震动，增加计数
+                shakeCount++;
+                lastShakePeakTime = now;
+              } else {
+                // 间隔太长，重置计数 (视为一次新的晃动序列开始)
+                shakeCount = 1;
+                lastShakePeakTime = now;
+              }
+            }
+            
+            // 调试: 可在控制台观察连续晃动计数 (生产环境不影响)
+            // console.log("shakeCount:", shakeCount, " magnitude:", magnitude.toFixed(2));
+            
+            // 当连续震动次数达到要求时，触发抓阄
+            if (shakeCount >= REQUIRED_SHAKE_COUNT) {
+              // 先重置计数避免在同一次抖动序列里多次触发
+              const triggerNow = Date.now();
+              // 再次确认冷却（防止极短时间内重复满足条件）
+              if (triggerNow - lastTriggerTime >= TRIGGER_COOLDOWN) {
+                performGrab('shake');
+                // 触发后重置摇一摇状态，避免同一轮晃动再次触发
+                resetShakeState();
+              } else {
+                // 冷却中，清空计数
+                resetShakeState();
+              }
+            }
+          } else {
+            // 未超过阈值时不做任何变化，但每隔较长时间没有有效震动，为防止陈旧计数污染，可适当重置
+            // 如果超过800ms无新的大于阈值的震动，视为晃动停止，重置计数 (避免摇动后残留计数)
+            if (lastShakePeakTime !== 0 && (now - lastShakePeakTime > 800)) {
+              resetShakeState();
             }
           }
+        };
+        
+        // 监听设备运动事件
+        window.addEventListener('devicemotion', motionHandler);
+      }
+      
+      // ---------- 按钮点击监听 (仅点击按钮触发，无额外干扰) ----------
+      function bindButtonEvent() {
+        grabBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          // 重置摇一摇计数 (避免按钮点击后紧接着摇一摇在冷却期内累积计数)
+          resetShakeState();
+          performGrab('button');
         });
       }
-
-      // 如果是iOS 微信等，可能需要用户首次点击页面才能激活摇一摇监听（已有点击按钮操作，但首次需交互）
-      // 在页面添加一个透明遮罩引导点击？不需要，按钮本身即可。
-      // 不过摇一摇监听通常在用户第一次手势后生效，此处保留。
-
-      // 初始随机展示一个结果？不展示，保持神秘。
-      // 但可以默认显示纸团。
+      
+      // ---------- 页面初始渲染 ----------
+      function init() {
+        renderPaperScraps();
+        bindButtonEvent();
+        initShakeDetection();
+        // 确保结果区域最初是隐藏的，占位文字显示
+        resultContainer.style.display = 'none';
+        placeholder.style.display = 'block';
+        // 重置各项状态变量
+        resetShakeState();
+        lastTriggerTime = 0;
+      }
+      
+      init();
     })();
   </script>
 </body>
